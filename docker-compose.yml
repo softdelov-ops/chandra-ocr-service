@@ -1,0 +1,91 @@
+# ── docker-compose.yml ────────────────────────────────────────────────────────
+# Chandra OCR 2 Service + sincronización automática a Google Drive via rclone
+#
+# Uso rápido:
+#   docker compose up -d
+#
+# Configurar Drive primero:
+#   docker compose run --rm rclone config
+#   → crear remote llamado "gdrive" apuntando a tu Google Drive
+
+version: "3.9"
+
+services:
+
+  # ── Servicio OCR principal ─────────────────────────────────────────────────
+  chandra-ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chandra-ocr
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/input:/data/input         # PDFs de entrada (poner los archivos acá)
+      - ./data/output:/data/output       # Markdowns generados
+      - ./data/cache:/data/cache         # Caché de páginas OCR
+      - ./data/models:/root/.cache       # Cache de modelos HuggingFace
+    environment:
+      - CHANDRA_MODEL=${CHANDRA_MODEL:-datalab-to/chandra-ocr-2}
+      - OCR_DPI=${OCR_DPI:-96}
+      - BATCH_SIZE=${BATCH_SIZE:-2}
+      - LOAD_4BIT=${LOAD_4BIT:-true}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s    # dar tiempo al modelo para cargar (~2 min en T4)
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ── Sincronización automática a Google Drive ────────────────────────────────
+  rclone-sync:
+    image: rclone/rclone:latest
+    container_name: chandra-rclone
+    restart: unless-stopped
+    volumes:
+      - ./data/output:/data/output:ro     # Solo lectura de la salida del OCR
+      - ./rclone.conf:/config/rclone/rclone.conf:ro   # Configuración de rclone
+    environment:
+      - DRIVE_REMOTE=${DRIVE_REMOTE:-gdrive}
+      - DRIVE_PATH=${DRIVE_PATH:-Digesto/.ocr_output}   # Carpeta en tu Drive
+      - SYNC_INTERVAL=${SYNC_INTERVAL:-60}              # Segundos entre syncs
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "⏳ Esperando servicio OCR..."
+        sleep 30
+        echo "🔄 Iniciando sync loop → $${DRIVE_REMOTE}:$${DRIVE_PATH}"
+        while true; do
+          rclone sync /data/output "$${DRIVE_REMOTE}:$${DRIVE_PATH}" \
+            --transfers=4 \
+            --checkers=8 \
+            --drive-chunk-size=64M \
+            --log-level=INFO \
+            --stats=0 \
+            --exclude="**/.DS_Store" \
+            2>&1 | tail -5
+          echo "  ✅ Sync OK — próximo en $${SYNC_INTERVAL}s"
+          sleep "$${SYNC_INTERVAL}"
+        done
+    depends_on:
+      chandra-ocr:
+        condition: service_started
+    profiles:
+      - with-drive    # activar con: docker compose --profile with-drive up -d
+
+volumes:
+  models-cache:
