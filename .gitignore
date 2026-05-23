@@ -1,0 +1,94 @@
+# ==========================================
+# ── CHANDRA OCR — CONFIGURACIÓN DE GITIGNORE
+# ==========================================
+
+# ── 1. ARCHIVOS DE SISTEMA Y CONFIGURACIÓN LOCAL
+.DS_Store
+Thumbs.db
+*.local
+.env
+.env.*
+!.env.example
+
+# ── 2. ENTORNOS VIRTUALES DE PYTHON
+.venv/
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ── 3. CACHE DE PYTHON Y ENTORNO
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipych_cache/
+
+# ── 4. JUPYTER NOTEBOOKS (Por si usas para pruebas de OCR)
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# ── 5. EDITORES DE CÓDIGO (VS Code, PyCharm)
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# ── 6. DOCKER LOCAL
+.docker/
+# Ignorar certificados locales si los tuvieras
+*.pem
+*.crt
+
+# ── 7. ARCHIVOS DE DATOS, PESOS Y RESULTADOS (¡CRÍTICO!)
+# Las imágenes base de PyTorch o modelos descargados suelen pesar gigas.
+# Git no está diseñado para trackear datasets ni archivos binarios gigantes.
+
+# Ignorar carpetas comunes de datos o outputs (ajusta según tus nombres reales)
+data/
+datasets/
+outputs/
+results/
+logs/
+storage/
+
+# Ignorar pesos de modelos de IA de cualquier formato pesado
+*.pt
+*.pth
+*.pkl
+*.ckpt
+*.h5
+*.onnx
+*.pb
+
+# Ignorar archivos PDF, imágenes o texto que uses de prueba para el OCR
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.tiff
+*.txt
+# Exceptuar el archivo de requerimientos
+!requirements.txt

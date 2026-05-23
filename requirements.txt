@@ -1,0 +1,24 @@
+# ── Chandra OCR 2 Service — requirements.txt ──────────────────────────────────
+
+# API framework
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# OCR
+chandra-ocr[hf]>=0.1.0
+pdf2image>=1.17.0
+
+# PDF parsing
+pymupdf>=1.24.0
+
+# Transformers / quantization
+transformers>=4.40.0
+bitsandbytes>=0.43.0
+accelerate>=0.29.0
+einops
+sentencepiece
+
+# Utilities
+Pillow>=10.3.0
+tqdm>=4.66.0
+pydantic>=2.7.0

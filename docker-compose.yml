@@ -8,8 +8,6 @@
 #   docker compose run --rm rclone config
 #   → crear remote llamado "gdrive" apuntando a tu Google Drive
 
-version: "3.9"
-
 services:
 
   # ── Servicio OCR principal ─────────────────────────────────────────────────
