@@ -1,204 +1,180 @@
-# Chandra OCR 2 — Servicio Docker local para Google Colab
+# 🔍 Chandra OCR 2 · Servicio Docker Local
 
-Servicio REST que corre **Chandra OCR 2** (`datalab-to/chandra-ocr-2`) en tu máquina local con GPU, expone una API HTTP, y sincroniza los resultados automáticamente a **Google Drive** con rclone.
-
-Diseñado para usarse junto al notebook [RAG Digesto Comentado](../RAG_Digesto_Comentado_v18.ipynb): la celda `1.2-OCR` encola los PDFs aquí, libera la red de Colab, y la celda `1.2` lee directamente la carpeta de Drive ya procesada.
-
-```
-[Colab celda 1.2-OCR] ──HTTP──▶ [Docker :8000] ──GPU──▶ Chandra OCR 2
-                                        │
-                                 /data/output/*.md
-                                        │
-                                 rclone sync
-                                        │
-                              Google Drive / Digesto/.ocr_output
-                                        │
-                         [Colab celda 1.2 lee Drive] ──▶ documents
-```
+Servicio REST local para OCR de PDFs escaneados usando **Chandra OCR 2** (`datalab-to/chandra-ocr-2`).  
+Diseñado para integrarse con el notebook **RAG Digesto Universitario** en Google Colab.
 
 ---
 
-## Requisitos
+## ✨ Arquitectura
 
-| Item | Versión mínima |
-|------|----------------|
-| Docker + Docker Compose | v24 |
-| NVIDIA GPU + drivers | CUDA 12.1+ |
-| nvidia-container-toolkit | cualquiera |
-| RAM sistema | 16 GB |
-| VRAM | 8 GB (T4 suficiente con 4-bit) |
+```
+[Colab celda 1.2-OCR]
+   │  HTTP (ngrok/Cloudflare Tunnel)
+   ▼
+[Docker local: puerto 8000]  ←  ChandraOCRClient (chandra_colab_client.py)
+   │  GPU local
+   ▼
+Chandra OCR 2 (4B params, 4-bit NF4)
+   │
+   ▼
+/output/*.md  ──  rclone/watch_and_sync.py  ──▶  Google Drive
+                                                       │
+                              [Colab celda 1.2 lee Drive] ──▶ documents
+```
+
+**Beneficios:**
+- No usa GPU de Colab → GPU libre para embeddings y LLM
+- No bloquea el notebook → celdas 1.3, 1.4, 1.5 ejecutan en paralelo
+- Caché persistente → no reprocesa páginas ya hechas
+- Resultados en Drive → disponibles en sesiones futuras
 
 ---
 
-## Instalación rápida
+## 🚀 Inicio rápido
+
+### 1. Clonar el repo
 
 ```bash
-# 1. Clonar el repo
-git clone https://github.com/TU_USUARIO/chandra-ocr-service
+git clone https://github.com/softdelov-ops/chandra-ocr-service.git
 cd chandra-ocr-service
-
-# 2. Crear directorios de datos
-mkdir -p data/{input,output,cache,models}
-
-# 3. Copiar .env
-cp .env.example .env
-# Editar .env si querés cambiar BATCH_SIZE, OCR_DPI, etc.
-
-# 4. Copiar tus PDFs a data/input/
-#    (estructura de carpetas se preserva en el output)
-cp /ruta/a/tus/pdfs/*.pdf data/input/
-
-# 5. Iniciar el servicio
-docker compose up -d
-
-# Ver logs
-docker compose logs -f chandra-ocr
 ```
 
----
-
-## Sincronización automática a Google Drive
+### 2. Copiar los PDFs a /input
 
 ```bash
-# 1. Configurar rclone (una sola vez)
-bash scripts/setup_drive_sync.sh
+# Opción A: bind mount de tu carpeta de Digesto
+mkdir -p input
+# Copiá o symlinkeá tu carpeta de PDFs dentro de ./input/
 
-# 2. Iniciar con sincronización
-docker compose --profile with-drive up -d
+# Opción B: editar docker-compose.yml y cambiar ./input por la ruta real
+#   - ./input:/input
+#   + /ruta/a/tus/pdfs:/input
 ```
 
-El servicio `rclone-sync` corre un loop que cada 60 segundos sincroniza
-`data/output/` → `gdrive:Digesto/.ocr_output` (configurable en `.env`).
-
----
-
-## API
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| `GET`  | `/health` | Estado del servicio y modelo |
-| `POST` | `/ocr/process` | Encolar PDFs para procesar |
-| `GET`  | `/ocr/status/{job_id}` | Progreso de un job |
-| `GET`  | `/ocr/jobs` | Listar todos los jobs |
-| `GET`  | `/ocr/files` | Listar archivos `.md` generados |
-
-### Ejemplo: encolar todos los PDFs
+### 3. Levantar el servicio
 
 ```bash
-curl -X POST http://localhost:8000/ocr/process \
-  -H "Content-Type: application/json" \
-  -d '{"files": null, "force_reprocess": false}'
+# Solo GPU local
+docker compose up -d --build
+
+# Con tunnel ngrok (para que Colab alcance tu máquina)
+NGROK_AUTHTOKEN=tu_token docker compose --profile tunnel up -d --build
 ```
 
-### Ejemplo: consultar progreso
+> **Primera vez:** descarga del modelo (~8 GB) + carga en GPU: ~2 min.  
+> Verificar: `curl http://localhost:8000/health`
+
+### 4. Sync automático a Drive (opcional)
 
 ```bash
-curl http://localhost:8000/ocr/status/JOB_ID
+# Instalar rclone y configurar remote "gdrive"
+curl https://rclone.org/install.sh | sudo bash
+rclone config   # crear remote → Google Drive → llamalo "gdrive"
+
+# Iniciar watcher en background
+python scripts/watch_and_sync.py \
+  --output-dir ./output \
+  --remote "gdrive:Digesto/.ocr_output" &
 ```
 
----
-
-## Uso desde Google Colab
-
-La celda `1.2-OCR` del notebook hace esto automáticamente. Si querés usar el cliente manualmente:
+### 5. En el notebook (Colab)
 
 ```python
-# Instalar cliente
-!pip install -q httpx
-
-import asyncio, nest_asyncio
-nest_asyncio.apply()
-
-# Descargar cliente
-!wget -q https://raw.githubusercontent.com/TU_USUARIO/chandra-ocr-service/main/scripts/chandra_colab_client.py
-
-from chandra_colab_client import ChandraOCRClient
-
-async def main():
-    async with ChandraOCRClient("http://TU_IP:8000") as c:
-        await c.wait_ready()       # esperar que el modelo cargue
-        job = await c.process_all()
-        # No bloquea — podés ejecutar otras celdas mientras tanto
-        # Cuando necesitás los resultados:
-        await c.wait_done(job["job_id"])
-
-asyncio.get_event_loop().run_until_complete(main())
-```
-
-### ¿Cómo acceder desde Colab a tu máquina local?
-
-**Opción A — Red local (misma red WiFi/LAN):**
-```
-OCR_SERVICE_URL = "http://192.168.1.100:8000"  # IP de tu PC
-```
-
-**Opción B — ngrok (cualquier red):**
-```bash
-# En tu máquina local
-ngrok http 8000
-# Colab:
-OCR_SERVICE_URL = "https://XXXX.ngrok.io"
-```
-
-**Opción C — Cloudflare Tunnel (gratuito, sin cuenta):**
-```bash
-cloudflared tunnel --url http://localhost:8000
+# Celda 1.2-OCR
+OCR_SERVICE_URL = ""   # vacío = auto-detecta ngrok
+                       # o pegá: "https://xxxx.ngrok-free.app"
 ```
 
 ---
 
-## Variables de entorno
+## 🔌 API
+
+| Método | Endpoint | Descripción |
+|---|---|---|
+| `GET` | `/health` | Estado del servicio y GPU |
+| `POST` | `/process_all` | Encolar OCR de todos los PDFs en /input |
+| `GET` | `/jobs/{job_id}` | Estado del job (progress_pct, processed, total) |
+| `GET` | `/cache/stats` | Páginas en caché |
+
+### Ejemplo manual
+
+```bash
+# Verificar
+curl http://localhost:8000/health
+
+# Encolar job
+curl -X POST http://localhost:8000/process_all \
+  -H "Content-Type: application/json" \
+  -d '{"force": false}'
+# → {"job_id": "a1b2c3d4", "queued": 12, "skipped": 3, "total": 15}
+
+# Consultar progreso
+curl http://localhost:8000/jobs/a1b2c3d4
+# → {"status": "running", "processed": 5, "total": 12, "progress_pct": 41.7}
+```
+
+---
+
+## ⚙️ Variables de entorno
 
 | Variable | Default | Descripción |
-|----------|---------|-------------|
-| `CHANDRA_MODEL` | `datalab-to/chandra-ocr-2` | Modelo HuggingFace |
-| `LOAD_4BIT` | `true` | Cuantización 4-bit NF4 |
+|---|---|---|
+| `CHANDRA_MODEL` | `datalab-to/chandra-ocr-2` | HuggingFace model ID |
+| `USE_4BIT` | `1` | Cuantización 4-bit NF4 |
 | `OCR_DPI` | `96` | DPI para renderizar páginas |
-| `BATCH_SIZE` | `2` | Páginas por llamada GPU |
-| `MIN_CHARS` | `50` | Mínimo chars para considerar texto nativo |
-| `DRIVE_REMOTE` | `gdrive` | Nombre del remote rclone |
-| `DRIVE_PATH` | `Digesto/.ocr_output` | Ruta en Drive |
-| `SYNC_INTERVAL` | `60` | Segundos entre syncs |
+| `MAX_IMG_SIDE` | `1600` | Máximo lado de imagen |
+| `BATCH_SIZE` | `2` | Páginas por lote GPU |
+| `MIN_CHARS` | `50` | Mín. caracteres para considerar página como nativa |
+| `INPUT_DIR` | `/input` | Carpeta con PDFs fuente |
+| `OUTPUT_DIR` | `/output` | Carpeta de resultados `.md` |
+| `CACHE_DIR` | `/cache` | Caché de páginas procesadas |
 
 ---
 
-## Estructura del proyecto
+## 🗂️ Estructura
 
 ```
 chandra-ocr-service/
 ├── app/
-│   └── main.py              ← FastAPI service
+│   └── main.py              # FastAPI (endpoints /health, /process_all, /jobs/{id})
 ├── scripts/
-│   ├── chandra_colab_client.py   ← Cliente async para Colab
-│   └── setup_drive_sync.sh       ← Setup rclone
-├── data/                    ← Creado en instalación (gitignore)
-│   ├── input/               ← PDFs de entrada
-│   ├── output/              ← Markdowns generados
-│   ├── cache/               ← Caché de páginas OCR
-│   └── models/              ← Cache modelos HuggingFace
+│   ├── chandra_colab_client.py   # Cliente async descargado por Colab
+│   ├── watch_and_sync.py         # Sync automático /output → Drive
+│   └── sync_to_drive.py          # Sync manual
+├── input/                   # PDFs fuente (montado en /input)
+├── output/                  # .md procesados (montado en /output)
+├── cache/                   # Caché (montado en /cache)
 ├── Dockerfile
 ├── docker-compose.yml
-├── requirements.txt
-├── .env.example
-└── README.md
+└── requirements.txt
 ```
 
 ---
 
-## Caché
+## 🐛 Troubleshooting
 
-El servicio mantiene un caché en `data/cache/` usando el hash MD5 de
-`(modelo + ruta_pdf + num_página + mtime)`. Al reprocesar un PDF sin cambios,
-las páginas ya procesadas se recuperan del caché sin tocar la GPU.
+**`❌ No se pudo conectar en http://192.168.x.x:8000`**  
+→ Colab no puede alcanzar IPs locales. Usá ngrok o Cloudflare Tunnel.
 
-Para forzar reprocesamiento completo:
 ```bash
-curl -X POST http://localhost:8000/ocr/process \
-  -d '{"force_reprocess": true}'
+# ngrok (automático — el cliente lo detecta solo):
+NGROK_AUTHTOKEN=xxx docker compose --profile tunnel up -d
+# Ver URL: http://localhost:4040
+
+# Cloudflare (sin cuenta):
+docker run --rm cloudflare/cloudflared:latest \
+  tunnel --url http://host.docker.internal:8000
 ```
 
----
+**`cuda out of memory`**  
+→ Reducí `BATCH_SIZE=1` en `docker-compose.yml`.
 
-## Licencia
+**El modelo tarda en cargar**  
+→ Normal la primera vez (~2 min). El healthcheck espera 120s.  
+→ Los pesos se cachean en `~/.cache/huggingface` para la próxima vez.
 
-MIT
+**No aparecen PDFs en `/input`**  
+→ Verificar que el volumen esté montado correctamente:  
+```bash
+docker exec chandra-ocr-service ls /input
+```
