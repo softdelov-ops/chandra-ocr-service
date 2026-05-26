@@ -1,4 +1,4 @@
-version: "3.9"
+# version: "3.9"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # chandra-ocr-service  ·  docker-compose.yml  v4
@@ -31,13 +31,7 @@ services:
       - INPUT_DIR=/input
       - OUTPUT_DIR=/output
       - CACHE_DIR=/cache
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
