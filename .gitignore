@@ -66,6 +66,16 @@ __pycache__/
 # Las imágenes base de PyTorch o modelos descargados suelen pesar gigas.
 # Git no está diseñado para trackear datasets ni archivos binarios gigantes.
 
+# Ignorar el contenido de las carpetas de datos pero mantener la estructura
+data/input/*
+!data/input/.gitkeep
+
+data/output/*
+!data/output/.gitkeep
+
+data/cache/*
+!data/cache/.gitkeep
+
 # Ignorar carpetas comunes de datos o outputs (ajusta según tus nombres reales)
 data/
 input/
@@ -76,16 +86,6 @@ outputs/
 results/
 logs/
 storage/
-
-# Ignorar el contenido de las carpetas de datos pero mantener la estructura
-data/input/*
-!data/input/.gitkeep
-
-data/output/*
-!data/output/.gitkeep
-
-data/cache/*
-!data/cache/.gitkeep
 
 # Ignorar pesos de modelos de IA de cualquier formato pesado
 cache-huggingface/
