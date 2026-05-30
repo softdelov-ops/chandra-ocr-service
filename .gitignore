@@ -68,13 +68,27 @@ __pycache__/
 
 # Ignorar carpetas comunes de datos o outputs (ajusta según tus nombres reales)
 data/
+input/
+output/
+cache/
 datasets/
 outputs/
 results/
 logs/
 storage/
 
+# Ignorar el contenido de las carpetas de datos pero mantener la estructura
+data/input/*
+!data/input/.gitkeep
+
+data/output/*
+!data/output/.gitkeep
+
+data/cache/*
+!data/cache/.gitkeep
+
 # Ignorar pesos de modelos de IA de cualquier formato pesado
+cache-huggingface/
 *.pt
 *.pth
 *.pkl

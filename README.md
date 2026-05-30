@@ -136,17 +136,20 @@ curl http://localhost:8000/jobs/a1b2c3d4
 ```
 chandra-ocr-service/
 ├── app/
-│   └── main.py              # FastAPI (endpoints /health, /process_all, /jobs/{id})
+│   └── main.py              ← FastAPI service
 ├── scripts/
-│   ├── chandra_colab_client.py   # Cliente async descargado por Colab
-│   ├── watch_and_sync.py         # Sync automático /output → Drive
-│   └── sync_to_drive.py          # Sync manual
-├── input/                   # PDFs fuente (montado en /input)
-├── output/                  # .md procesados (montado en /output)
-├── cache/                   # Caché (montado en /cache)
+│   ├── chandra_colab_client.py   ← Cliente async para Colab
+│   └── setup_drive_sync.sh       ← Setup rclone
+├── data/                    ← Creado en instalación (gitignore)
+│   ├── input/               ← PDFs de entrada
+│   ├── output/              ← Markdowns generados
+│   ├── cache/               ← Caché de páginas OCR
+│   └── models/              ← Cache modelos HuggingFace
 ├── Dockerfile
 ├── docker-compose.yml
-└── requirements.txt
+├── requirements.txt
+├── .env.example
+└── README.md
 ```
 
 ---

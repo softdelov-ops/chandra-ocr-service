@@ -17,16 +17,22 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./input:/input      # ← PDFs del Digesto (montá tu carpeta aquí)
-      - ./output:/output    # ← .md procesados    (sincronizar a Drive)
-      - ./cache:/cache      # ← Caché persistente (no borrar entre sesiones)
-      - ~/.cache/huggingface:/root/.cache/huggingface   # pesos del modelo
+      - ./input:/data/input      
+      - ./output:/data/output    
+      - ./cache:/data/cache      
+      # CAMBIO 1: Mapeamos tu carpeta de Windows a una ruta local común en el contenedor
+      - E:/Varios/Rodrigo/LSI/Tesis de Grado/cache-huggingface:/app/modelo_local
     environment:
-      - CHANDRA_MODEL=datalab-to/chandra-ocr-2
-      - USE_4BIT=1
+      # CAMBIO 2: Le decimos al script que lea el modelo desde la carpeta local armada arriba
+      - CHANDRA_MODEL=/app/modelo_local
+      - HF_TOKEN=${HF_TOKEN}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - USE_4BIT=0
       - OCR_DPI=96
       - MAX_IMG_SIDE=1600
-      - BATCH_SIZE=2        # subir a 4 en A100/A10G
+      - BATCH_SIZE=2        
       - MIN_CHARS=50
       - INPUT_DIR=/input
       - OUTPUT_DIR=/output
@@ -38,21 +44,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s    # tiempo para cargar el modelo
-
-  # ── Ngrok tunnel (opcional) ────────────────────────────────────────────────
-  # Activa con: NGROK_AUTHTOKEN=tu_token docker compose --profile tunnel up -d
-  # La URL pública aparece en http://localhost:4040
-  # El cliente de Colab la detecta automáticamente si dejás OCR_SERVICE_URL vacío.
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: chandra-ngrok
-    profiles: ["tunnel"]
-    depends_on:
-      - chandra-ocr
-    environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    command: http chandra-ocr:8000
-    ports:
-      - "4040:4040"         # ngrok dashboard local
-    restart: unless-stopped
+      start_period: 120s
